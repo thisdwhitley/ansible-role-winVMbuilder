@@ -144,3 +144,23 @@
     - '/tmp/IE11 - Win7.ova'
     - /tmp/IE11.Win7.xml
 
+# get the IP of the new VM, unfortunately the 'virt' module does not provide
+# 'domifaddr' which we need to find the IP address that the VM got, so...shell
+- name: wait for the VM to get an IP and capture it
+  shell: >
+    virsh -c qemu:///system domifaddr IE11.Win7 | awk '/ipv4/ {split($NF,a,"/"); print a[1]}'
+  register: IPinfo
+  until: IPinfo.stdout != ""
+  retries: 10
+  delay: 5
+
+- name: add this VM to a "allVMs" group for future plays
+  add_host:
+    name: "IE11.Win7"
+    ansible_host: "{{ IPinfo.stdout }}"
+    ansible_user: IEUser
+    ansible_password: Passw0rd!
+    ansible_connection: winrm
+    ansible_winrm_server_cert_validation: ignore
+    groups: allVMs
+
