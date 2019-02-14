@@ -1,0 +1,15 @@
+---
+dependencies: []
+
+galaxy_info:
+  author: thisdwhitley
+  description: build a KVM (libvirt) Windows VM
+  license: license (MIT)
+  min_ansible_version: 2.4
+  platforms:
+  - name: Fedora
+    versions:
+    - 28
+  galaxy_tags:
+    - kvm
+    - libvirt

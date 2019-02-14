@@ -1,0 +1,146 @@
+---
+# 2019-02-14
+# https://az792536.vo.msecnd.net/vms/VMBuild_20150916/VirtualBox/IE8/IE8.Win7.VirtualBox.zip
+# https://az792536.vo.msecnd.net/vms/VMBuild_20150916/VirtualBox/IE9/IE9.Win7.VirtualBox.zip
+# https://az792536.vo.msecnd.net/vms/VMBuild_20150916/VirtualBox/IE10/IE10.Win7.VirtualBox.zip
+# https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
+# https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win81.VirtualBox.zip
+# https://az792536.vo.msecnd.net/vms/VMBuild_20180425/VirtualBox/MSEdge/MSEdge.Win10.VirtualBox.zip
+#
+#
+#  sudo wget https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo \
+#    -O /etc/yum.repos.d/virtio-win.repo --no-clobber
+- name: download the virtio-win repo
+  become: true
+  get_url:
+    url: https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo
+    dest: /etc/yum.repos.d/virtio-win.repo
+
+# sudo dnf install -y unzip virt-manager virtio-win
+- name: install the required packages
+  become: true
+  package:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - libvirt-python
+    - python2-lxml
+    - unzip
+    - virt-manager
+    - virtio-win
+
+# wget -P /tmp https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
+- name: download the Windows (VirtualBox) VM from Microsoft...patient
+  get_url:
+    url: https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
+    dest: /tmp
+# idempotent? this takes the time to download to compare so it takes a long time
+
+# unzip -d /depot/images/libvirt/ /tmp/IE11.Win7.VirtualBox.zip
+- name: unzip what Microsoft thinks is a VirtualBox VM...patienter
+  unarchive:
+    src: /tmp/IE11.Win7.VirtualBox.zip
+    dest: /tmp
+
+# virt-v2v -i ova '/depot/images/libvirt/IE11 - Win7.ova' -oc qemu:///system -o libvirt -of qcow2 -os default -n default -on IE11.Win7
+- name: command> convert the extracted OVA to qcow2 with virt-v2v...patientest
+  command: >
+    virt-v2v 
+      -i ova '/tmp/IE11 - Win7.ova' 
+      -o libvirt 
+      -oc qemu:///system 
+      -of qcow2 
+      -os default 
+      -n default 
+      -on IE11.Win7
+
+# sometimes ^ fails, maybe I should allow for it and try again if it does?
+
+# virsh -c qemu:///system dumpxml IE11.Win7 > /tmp/IE11.Win7.new
+- name: get xml information of created VM so we can modify NIC
+  virt:
+    name: IE11.Win7
+    command: get_xml
+    uri: qemu:///system
+  register: IE11_Win7_xml
+
+- name: copy the XML to a file on Ansible host which we will modify
+  local_action: 
+    module: copy
+    content: "{{ IE11_Win7_xml.get_xml }}"
+    dest: /tmp/IE11.Win7.xml
+
+# sed -e 's/bridge/network/g' \
+#     -e 's/NAT/default/g' \
+#     -e "s/type='virtio'/type='e1000'/g" \
+#     --in-place /tmp/IE11.Win7.new
+- name: modify the networking in the XML file to match our environment
+  replace:
+    path: /tmp/IE11.Win7.xml
+    regexp: "{{ item.old }}"
+    replace: "{{ item.new }}"
+  with_items:
+    - { old: "bridge", new: "network" }
+    - { old: "NAT", new: "default" }
+    - { old: "type='virtio'", new: "type='e1000'" }
+
+# virsh -c qemu:///system undefine IE11.Win7
+- name: undefine the existing VM
+  virt:
+    name: IE11.Win7
+    command: undefine
+    uri: qemu:///system
+
+# virsh -c qemu:///system create /tmp/IE11.Win7.new 
+- name: define the new VM with the changes we made
+  virt:
+    name: IE11.Win7
+    command: define
+    xml: "{{ lookup('file', '/tmp/IE11.Win7.xml') }}"
+    uri: qemu:///system
+
+- name: start the new VM with the changes we made
+  virt:
+    name: IE11.Win7
+    state: running
+    uri: qemu:///system
+
+# sleep 120;
+- name: the VM is coming up and updating drivers, we'll pause a few minutes here
+  pause:
+    minutes: 3
+
+# virsh -c qemu:///system reboot IE11.Win7
+- name: restart the new VM since it is asking for it
+  virt:
+    name: IE11.Win7
+    command: shutdown
+    uri: qemu:///system
+
+- name: wait for the VM to be shutdown via the VM OS
+  virt:
+    name: IE11.Win7
+    command: status
+    uri: qemu:///system
+  register: result
+  until: result.status.find("shutdown") != -1
+  retries: 180
+  delay: 5
+
+- name: start the new VM again
+  virt:
+    name: IE11.Win7
+    command: start
+    uri: qemu:///system
+
+# rm -vf /tmp/IE11.Win7.VirtualBox.zip
+# rm -vf '/depot/images/libvirt/IE11 - Win7.ova'
+- name: remove the intermediate files
+  file:
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - /tmp/IE11.Win7.VirtualBox.zip
+    - '/tmp/IE11 - Win7.ova'
+    - /tmp/IE11.Win7.xml
+

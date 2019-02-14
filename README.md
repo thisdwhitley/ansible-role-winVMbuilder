@@ -30,11 +30,14 @@ end, the role will add the new VM to an inventory group named `allVMs`.
 Important Notes
 ---------------
 
+* I have only tested this on my Fedora laptop, so YMMV
+* Some commands require `root` so ensure you have ansible set up to account
+  for this
 * I have chosen to hardcode the VM to be "IE11 on Win7 (x86)" but may allow for
   user specification in the future?
 * This relies a ***lot*** on your KVM/libvirt (which I will use synonymously
   throughout) configuration, make sure that is set up or you'll get really
-  confused.  I speak from experience.
+  confused.  I speak from experience
 * The VM boots up and logs in as the `IEUser` automatically, but so that you
   don't have to search the internets, the password for that account is:
   `Passw0rd!`
@@ -43,8 +46,7 @@ Important Notes
 * This role is far from idempotent at this point.  During testing I have found
   the following commands helpful to clean up:
 
-      sudo virsh destroy <vm.name>;
-      sudo virsh undefine <vm.name> --remove-all-storage
+      sudo virsh destroy "IE11.Win7"; sudo virsh undefine --remove-all-storage "IE11.Win7"
 
 * The role will add the newly created VM into a group named `allVMs` which
   is cool because subsequent plays can then use `hosts: allVMs` and it will
