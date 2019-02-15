@@ -8,6 +8,18 @@
 # https://az792536.vo.msecnd.net/vms/VMBuild_20180425/VirtualBox/MSEdge/MSEdge.Win10.VirtualBox.zip
 #
 #
+- name: set a default VMurl if it wasn't passed into the role
+  set_fact:
+    vm_url: "{{ VMurl | default('https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip')}}"
+
+- name: set the zip file name variable
+  set_fact:
+    zip_file: "{{ vm_url | basename }}"
+
+- name: set the new VM name based on the zip name
+  set_fact:
+    vm_name: "{{ zip_file.split('.')[0] }}.{{ zip_file.split('.')[1] }}"
+
 #  sudo wget https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo \
 #    -O /etc/yum.repos.d/virtio-win.repo --no-clobber
 - name: download the virtio-win repo
@@ -24,7 +36,6 @@
     state: present
   with_items:
     - libvirt-python
-    - python2-lxml
     - unzip
     - virt-manager
     - virtio-win
@@ -32,43 +43,56 @@
 # wget -P /tmp https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
 - name: download the Windows (VirtualBox) VM from Microsoft...patient
   get_url:
-    url: https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
+    url: "{{ vm_url }}"
     dest: /tmp
 # idempotent? this takes the time to download to compare so it takes a long time
 
 # unzip -d /depot/images/libvirt/ /tmp/IE11.Win7.VirtualBox.zip
 - name: unzip what Microsoft thinks is a VirtualBox VM...patienter
   unarchive:
-    src: /tmp/IE11.Win7.VirtualBox.zip
+    src: /tmp/{{ zip_file }}
     dest: /tmp
+    list_files: true
+  register: unzipped
+
+##### testing
+- name: set the ova file name variable
+  set_fact:
+    ova_file: "/tmp/{{ unzipped.files[0] }}"
+
+# #    ova_file: "\'/tmp/{{ unzipped.files[0] }}\'"
+
+# - name: debug ova_file
+#   debug:
+#     msg: "ova_file = {{ ova_file }}"
 
 # virt-v2v -i ova '/depot/images/libvirt/IE11 - Win7.ova' -oc qemu:///system -o libvirt -of qcow2 -os default -n default -on IE11.Win7
 - name: command> convert the extracted OVA to qcow2 with virt-v2v...patientest
   command: >
     virt-v2v 
-      -i ova '/tmp/IE11 - Win7.ova' 
+      -i ova "{{ ova_file }}" 
       -o libvirt 
       -oc qemu:///system 
       -of qcow2 
       -os default 
       -n default 
-      -on IE11.Win7
+      -on "{{ vm_name }}"
 
 # sometimes ^ fails, maybe I should allow for it and try again if it does?
 
 # virsh -c qemu:///system dumpxml IE11.Win7 > /tmp/IE11.Win7.new
 - name: get xml information of created VM so we can modify NIC
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     command: get_xml
     uri: qemu:///system
-  register: IE11_Win7_xml
+  register: vm_xml
 
 - name: copy the XML to a file on Ansible host which we will modify
   local_action: 
     module: copy
-    content: "{{ IE11_Win7_xml.get_xml }}"
-    dest: /tmp/IE11.Win7.xml
+    content: "{{ vm_xml.get_xml }}"
+    dest: /tmp/{{ vm_name }}.xml
 
 # sed -e 's/bridge/network/g' \
 #     -e 's/NAT/default/g' \
@@ -76,7 +100,7 @@
 #     --in-place /tmp/IE11.Win7.new
 - name: modify the networking in the XML file to match our environment
   replace:
-    path: /tmp/IE11.Win7.xml
+    path: /tmp/{{ vm_name }}.xml
     regexp: "{{ item.old }}"
     replace: "{{ item.new }}"
   with_items:
@@ -87,21 +111,26 @@
 # virsh -c qemu:///system undefine IE11.Win7
 - name: undefine the existing VM
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     command: undefine
     uri: qemu:///system
 
 # virsh -c qemu:///system create /tmp/IE11.Win7.new 
 - name: define the new VM with the changes we made
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     command: define
-    xml: "{{ lookup('file', '/tmp/IE11.Win7.xml') }}"
+    xml: "{{ lookup('file', '/tmp/{{ vm_name }}.xml') }}"
     uri: qemu:///system
+
+# sleep
+- name: need some time between defining and starting, waiting momentarily
+  pause:
+    seconds: 10
 
 - name: start the new VM with the changes we made
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     state: running
     uri: qemu:///system
 
@@ -113,13 +142,13 @@
 # virsh -c qemu:///system reboot IE11.Win7
 - name: restart the new VM since it is asking for it
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     command: shutdown
     uri: qemu:///system
 
 - name: wait for the VM to be shutdown via the VM OS
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     command: status
     uri: qemu:///system
   register: result
@@ -129,7 +158,7 @@
 
 - name: start the new VM again
   virt:
-    name: IE11.Win7
+    name: "{{ vm_name }}"
     command: start
     uri: qemu:///system
 
@@ -140,15 +169,15 @@
     name: "{{ item }}"
     state: absent
   with_items:
-    - /tmp/IE11.Win7.VirtualBox.zip
-    - '/tmp/IE11 - Win7.ova'
-    - /tmp/IE11.Win7.xml
+    - "/tmp/{{ zip_file }}"
+    - "{{ ova_file }}"
+    - /tmp/{{ vm_name }}.xml
 
 # get the IP of the new VM, unfortunately the 'virt' module does not provide
 # 'domifaddr' which we need to find the IP address that the VM got, so...shell
 - name: wait for the VM to get an IP and capture it
   shell: >
-    virsh -c qemu:///system domifaddr IE11.Win7 | awk '/ipv4/ {split($NF,a,"/"); print a[1]}'
+    virsh -c qemu:///system domifaddr "{{ vm_name }}" | awk '/ipv4/ {split($NF,a,"/"); print a[1]}'
   register: IPinfo
   until: IPinfo.stdout != ""
   retries: 10
@@ -156,11 +185,10 @@
 
 - name: add this VM to a "allVMs" group for future plays
   add_host:
-    name: "IE11.Win7"
+    name: "{{ vm_name }}"
     ansible_host: "{{ IPinfo.stdout }}"
     ansible_user: IEUser
     ansible_password: Passw0rd!
     ansible_connection: winrm
     ansible_winrm_server_cert_validation: ignore
     groups: allVMs
-

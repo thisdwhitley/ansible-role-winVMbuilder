@@ -17,7 +17,7 @@ system (I am using Fedora).  At a high level, this role does the following:
 
 1. Sets up a repo and installs some required packages on the Ansible host
 2. Downloads a prebuilt *VirtualBox* VM from the very generous Microsoft
-3. Unpacks, and converts that file to something we can use on Linux
+3. Unpacks, and converts that file to something we can use with KVM
 4. Make some changes prior to starting the VM from this image...*I sort of
    consider this cheating because I couldn't get the networking figured out
    during conversion*
@@ -30,27 +30,29 @@ end, the role will add the new VM to an inventory group named `allVMs`.
 Important Notes
 ---------------
 
-* I have only tested this on my Fedora laptop, so YMMV
-* Some commands require `root` so ensure you have ansible set up to account
-  for this
-* I have chosen to hardcode the VM to be "IE11 on Win7 (x86)" but may allow for
-  user specification in the future?
+* I have only tested this on my Fedora laptop, so ***YMMV***
 * This relies a ***lot*** on your KVM/libvirt (which I will use synonymously
   throughout) configuration, make sure that is set up or you'll get really
   confused.  I speak from experience
+* Currently this role uses the `default` storage pool and `default` network
+  because I felt those were most likely available.  Feel free to modify per your
+  specific situation.
+* I changed the NIC to use e1000 until I figure out the virtio drivers during
+  conversion...
+* Some commands require `root` so ensure you have ansible set up to account
+  for this
+* This is currently developed to be used on a system locally.  In order to use
+  it with Tower or AWX will take some refactoring
 * The VM boots up and logs in as the `IEUser` automatically, but so that you
   don't have to search the internets, the password for that account is:
   `Passw0rd!`
-* This is currently developed to be used on a system locally.  In order to use
-  it with Tower or AWX will take some refactoring
-* This role is far from idempotent at this point.  During testing I have found
-  the following commands helpful to clean up:
-
-      sudo virsh destroy "IE11.Win7"; sudo virsh undefine --remove-all-storage "IE11.Win7"
-
+* This role is far from idempotent at this point.
 * The role will add the newly created VM into a group named `allVMs` which
   is cool because subsequent plays can then use `hosts: allVMs` and it will
   act on the VM created in this role.  Bingo bango.
+* There are a lot of factors to determine how long this role will take to run.
+  But be aware that we do a few conversions and I don't clean up the files until
+  the end so make sure you have enough disk space
 
 Requirements
 ------------
@@ -63,20 +65,27 @@ I couldn't escape a few requirements:
 Role Variables
 --------------
 
-At this point I am not using any variables.
+* `VMurl` *(optional)* a specific VM to install, providing the entire URL as
+  the `VMurl` variable.  If none is specified, it defaults to:
+
+  <https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip>
+
+*See the below example which might answer any questions*
 
 
 Example Playbook
 ----------------
 
-Playbook with configuration options specified and utilizing the `allVMs`
-group for a subsequent play:
+Playbook specifying a particular VM (by providing the URL) and utilizing the
+`allVMs` group for a subsequent play (note, in order to use Ansible on a Windows
+system, you've got to jump through some other hoops):
 
 ```yaml
 - hosts: localhost
   connection: local
   roles:
     - role: winVMbuilder
+      VMurl: "https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win81.VirtualBox.zip"
 
 - hosts: allVMs
   roles:
