@@ -7,10 +7,12 @@
 # https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win81.VirtualBox.zip
 # https://az792536.vo.msecnd.net/vms/VMBuild_20180425/VirtualBox/MSEdge/MSEdge.Win10.VirtualBox.zip
 #
+# https://az792536.vo.msecnd.net/vms/VMBuild_20190311/VirtualBox/MSEdge/MSEdge.Win10.VirtualBox.zip
+#
 #
 - name: set a default VMurl if it wasn't passed into the role
   set_fact:
-    vm_url: "{{ VMurl | default('https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip')}}"
+    vm_url: "{{ VMurl | default('https://az792536.vo.msecnd.net/vms/VMBuild_20190311/VirtualBox/MSEdge/MSEdge.Win10.VirtualBox.zip')}}"
 
 - name: set the zip file name variable
   set_fact:
@@ -39,13 +41,14 @@
     - unzip
     - virt-manager
     - virtio-win
+    - virt-v2v
 
-# wget -P /tmp https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
-- name: download the Windows (VirtualBox) VM from Microsoft...patient
-  get_url:
-    url: "{{ vm_url }}"
-    dest: /tmp
-# idempotent? this takes the time to download to compare so it takes a long time
+# # wget -P /tmp https://az792536.vo.msecnd.net/vms/VMBuild_20180102/VirtualBox/IE11/IE11.Win7.VirtualBox.zip
+# - name: download the Windows (VirtualBox) VM from Microsoft...patient
+#   get_url:
+#     url: "{{ vm_url }}"
+#     dest: /tmp
+# # idempotent? this takes the time to download to compare so it takes a long time
 
 # unzip -d /depot/images/libvirt/ /tmp/IE11.Win7.VirtualBox.zip
 - name: unzip what Microsoft thinks is a VirtualBox VM...patienter
